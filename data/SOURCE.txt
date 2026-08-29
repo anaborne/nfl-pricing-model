@@ -1,0 +1,5 @@
+Source: https://github.com/nflverse/nfldata (data/games.csv), fetched 2026-08-26T19:54:33Z
+
+Caveat on the odds fields: nflverse documents away_moneyline / home_moneyline only as
+"Odds for away/home team to win the game" and names no provider and no opening/closing
+designation, so this repo calls them the market's recorded line rather than the close.
