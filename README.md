@@ -66,12 +66,12 @@ so even the weakest benchmark in the table is free of lookahead.
 
 [nflverse/nfldata](https://github.com/nflverse/nfldata), a public, community-maintained
 dataset (`data/games.csv`) carrying final scores and the spread for every NFL game back
-to 1999, and the recorded moneyline from 2006 onward (complete from 2010; all 272 of the
-2025 games graded here have one). One caveat is worth stating. nflverse documents
-these fields only as "Odds for away/home team to win the game" and does not specify
-whether they are opening or closing quotes, so this repo calls them the market's recorded
-line and never the close. If they are pre-close quotes, the true gap against a real
-closing line is wider than what this repo reports. A snapshot is vendored in
+to 1999, and the recorded moneyline from 2006 onward (complete from 2010 apart from a
+single 2017 game; all 272 of the 2025 games graded here have one). One caveat is worth
+stating. nflverse documents these fields only as "Odds for away/home team to win the game"
+and does not specify whether they are opening or closing quotes, so this repo calls them
+the market's recorded line and never the close. If they are pre-close quotes, the true gap
+against a real closing line is wider than what this repo reports. A snapshot is vendored in
 `data/games.csv` so this repo runs standalone without depending on the source staying
 live, and `data/SOURCE.txt` records exactly when and from where it was pulled and repeats
 this caveat.
@@ -109,18 +109,20 @@ The model is mildly overconfident, and that accounts for very little of the gap.
 `y ~ sigmoid(a + b·logit(p))` to each forecaster gives a recalibration slope of 0.877
 for the model and 0.985 for the market (`output/recalibration.csv`). A slope of 1 is
 perfect calibration in the logit sense, and below 1 means the probabilities are too extreme
-for how often they are right. The market's 0.985 is essentially 1. The model's 0.877 says
-its 80% picks should have been more like 76% picks. Correcting that is the most generous
-fix available, since the coefficients are fit in sample on the same 272 games, and it moves
-the model's Brier from 0.2239 only to 0.2229, which closes 8% of the gap. Recalibrating
-both forecasters leaves 93% of the gap standing. What is left is resolution. The market's
-probabilities separate winners from losers better, AUC 0.720 against 0.687, and that is
-what the disagreement table below shows game by game.
+for how often they are right. The market's 0.985 is as close to 1 as this sample can show.
+The model's 0.877 says its 80% picks should have been more like 76% picks. Correcting that
+is the most generous fix available, since the coefficients are fit in sample on the same
+272 games, and it moves the model's Brier from 0.2239 only to 0.2229, which closes 8% of
+the gap. Recalibrating both forecasters leaves 93% of the gap standing. What is left is
+resolution. The market's probabilities separate winners from losers better, AUC 0.720
+against 0.687 (`output/discrimination.csv`), and that is what the disagreement table below
+shows game by game.
 
 See `output/calibration_plot.png` for the full reliability diagram (model vs. market,
 both plotted against the realized frequency in each fixed-width 0.1 probability bin,
-with both recalibration slopes in the legend). The bins are equal width, not equal
-count, so the marker at the top of the range stands on very few games.
+with both recalibration slopes in the legend). The bins are equal width. Each holds
+however many games fell into it, and the marker at the top of the range stands on very
+few.
 
 ### Is the gap real, or is n=272 too small?
 
@@ -251,7 +253,7 @@ The ordering does not change under any of the three.
   opening or closing. See the Data section. If these are pre-close quotes, the true gap
   against a real closing line is wider than reported here.
 - This is a single-season backtest (n=272). The paired 95% CI on the Brier difference is
-  [+0.00175, +0.02205]. It excludes zero, its lower bound is small, and one season
+  [+0.00217, +0.02245]. It excludes zero, its lower bound is small, and one season
   cannot separate a 0.012 gap from a 0.002 one.
 
 ## What this is not

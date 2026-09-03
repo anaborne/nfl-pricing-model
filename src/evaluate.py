@@ -6,6 +6,8 @@ elo_model.py. Nothing in this file re-derives or overrides one.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -14,6 +16,9 @@ import matplotlib.pyplot as plt
 
 WARMUP_FIRST_SEASON = 2002
 WARMUP_LAST_SEASON = 2024
+
+# output/ is committed, but recreate it so a run still works after a "rm -rf output".
+os.makedirs("output", exist_ok=True)
 
 df = pd.read_csv("output/predictions_2025.csv")
 y = df["home_win"].to_numpy(dtype=float)
@@ -221,6 +226,85 @@ pd.DataFrame(
     ]
 ).to_csv("output/recalibration.csv", index=False)
 
+
+# The fit above only names the miscalibration. Applying it says how much of the Brier gap
+# that miscalibration accounts for. This is the most generous form of the question, since
+# the coefficients are fit in sample on the same 272 games.
+def recalibrate(p: np.ndarray, a: float, b: float, eps: float = 1e-9) -> np.ndarray:
+    p = np.clip(p, eps, 1 - eps)
+    return 1.0 / (1.0 + np.exp(-(a + b * np.log(p / (1 - p)))))
+
+
+def auc(p: np.ndarray, y: np.ndarray) -> float:
+    """Area under the ROC curve, as the Mann-Whitney statistic with ties split evenly.
+
+    Brier mixes calibration with resolution. AUC ignores calibration and asks only whether
+    the games the home team won were ranked above the games it lost, so it isolates the
+    part of the gap that recalibration leaves untouched.
+    """
+    order = np.argsort(p, kind="mergesort")
+    ranks = np.empty(len(p), dtype=float)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and p[order[j + 1]] == p[order[i]]:
+            j += 1
+        ranks[order[i:j + 1]] = (i + j) / 2.0 + 1.0
+        i = j + 1
+    n_pos = float((y == 1).sum())
+    n_neg = float(len(y) - n_pos)
+    return float((ranks[y == 1].sum() - n_pos * (n_pos + 1.0) / 2.0) / (n_pos * n_neg))
+
+
+model_recal_p = recalibrate(model_p, model_a, model_b)
+market_recal_p = recalibrate(market_p, market_a, market_b)
+model_brier, market_brier = brier(model_p, y), brier(market_p, y)
+model_recal_brier, market_recal_brier = brier(model_recal_p, y), brier(market_recal_p, y)
+gap = model_brier - market_brier
+gap_closed_model_recalibrated = (model_brier - model_recal_brier) / gap
+gap_left_both_recalibrated = (model_recal_brier - market_recal_brier) / gap
+model_auc, market_auc = auc(model_p, y), auc(market_p, y)
+
+print()
+print("Recalibrated in sample: a ceiling on what fixing calibration alone could buy")
+print(f"{'':32s}{'Brier':>10s}{'recal.':>10s}{'AUC':>8s}")
+print(
+    f"{'model (walk-forward Elo)':32s}{model_brier:10.4f}"
+    f"{model_recal_brier:10.4f}{model_auc:8.3f}"
+)
+print(
+    f"{'market (de-vigged moneyline)':32s}{market_brier:10.4f}"
+    f"{market_recal_brier:10.4f}{market_auc:8.3f}"
+)
+print(
+    f"  recalibrating the model alone closes {gap_closed_model_recalibrated * 100:.0f}% of "
+    f"the {gap:.4f} Brier gap"
+)
+print(
+    f"  recalibrating both leaves {gap_left_both_recalibrated * 100:.0f}% of the gap "
+    f"standing. The rest is resolution, which the AUC column measures."
+)
+# Rounded on write for the same reason as recalibration.csv above: these follow from the
+# IRLS coefficients, whose last float64 digit drifts between runs.
+pd.DataFrame(
+    [
+        {
+            "forecaster": name,
+            "n": len(df),
+            "brier": round(b, 6),
+            "recalibrated_brier": round(rb, 6),
+            "auc": round(a, 6),
+            "gap": round(gap, 6),
+            "gap_closed_model_recalibrated": round(gap_closed_model_recalibrated, 6),
+            "gap_left_both_recalibrated": round(gap_left_both_recalibrated, 6),
+        }
+        for name, b, rb, a in (
+            ("model", model_brier, model_recal_brier, model_auc),
+            ("market", market_brier, market_recal_brier, market_auc),
+        )
+    ]
+).to_csv("output/discrimination.csv", index=False)
+
 # Cut at week 4 and week 18: early season is ratings still shaking off the carryover
 # regression, and week 18 is rest-and-sit decisions no box-score rating system can see.
 week = df["week"].to_numpy(dtype=int)
@@ -318,5 +402,6 @@ print(
 )
 print(
     "Wrote output/metrics.csv, output/tie_treatment.csv, output/paired_test.csv, "
-    "output/disagreement.csv, output/recalibration.csv, output/by_week_bucket.csv"
+    "output/disagreement.csv, output/recalibration.csv, output/discrimination.csv, "
+    "output/by_week_bucket.csv"
 )

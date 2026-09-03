@@ -16,6 +16,7 @@ and never "the close".
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -203,6 +204,8 @@ def devig_power(prob_a: float, prob_b: float, tol: float = 1e-12) -> tuple[float
 
 
 if __name__ == "__main__":
+    # output/ is committed, but recreate it so a run still works after a "rm -rf output".
+    os.makedirs("output", exist_ok=True)
     games = load_games("data/games.csv")
     priced = run_walkforward(games, price_season=2025)
 

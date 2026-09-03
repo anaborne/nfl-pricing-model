@@ -15,6 +15,8 @@ scratch.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -60,6 +62,8 @@ def is_published(params: EloParams) -> bool:
 
 
 if __name__ == "__main__":
+    # output/ is committed, but recreate it so a run still works after a "rm -rf output".
+    os.makedirs("output", exist_ok=True)
     games = load_games("data/games.csv")
 
     # The published run, reused as the model side of the de-vig sweep (changing how the
