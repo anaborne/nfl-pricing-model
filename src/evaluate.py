@@ -289,7 +289,7 @@ ax.scatter(
 )
 ax.set_xlim(0, 1)
 ax.set_ylim(0, 1)
-ax.set_xlabel("Mean predicted probability (home win), by decile bin")
+ax.set_xlabel("Mean predicted probability (home win), by 0.1-wide bin")
 ax.set_ylabel("Realized home-win frequency in that bin")
 ax.set_title("2025 NFL regular season: predicted vs. realized (n=272)\nmarker size = games in bin")
 ax.legend(loc="upper left", frameon=False)

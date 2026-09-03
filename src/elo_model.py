@@ -83,11 +83,19 @@ class EloState:
             self.seasons_seen[team] = season
         return self.ratings[team]
 
-    def update(self, home: str, away: str, season: int, home_margin: int) -> None:
+    def hfa(self, neutral: bool) -> float:
+        """No home field at a neutral site. nflverse marks those games location ==
+        "Neutral"; the 2025 regular season has seven, all internationals.
+        """
+        return 0.0 if neutral else self.params.home_field_advantage
+
+    def update(
+        self, home: str, away: str, season: int, home_margin: int, neutral: bool = False
+    ) -> None:
         home, away = _canon(home), _canon(away)
         home_elo = self.get(home, season)
         away_elo = self.get(away, season)
-        elo_diff = (home_elo + self.params.home_field_advantage) - away_elo
+        elo_diff = (home_elo + self.hfa(neutral)) - away_elo
         prob_home_win = elo_win_prob(elo_diff)
         actual_home = 1.0 if home_margin > 0 else (0.5 if home_margin == 0 else 0.0)
 
@@ -124,11 +132,12 @@ def run_walkforward(
         if pd.isna(home_score) or pd.isna(away_score):
             continue
         home_margin = int(home_score) - int(away_score)
+        neutral = str(g.get("location", "Home")) != "Home"
 
         if season == price_season:
             home_elo = state.get(home, season)
             away_elo = state.get(away, season)
-            elo_diff = (home_elo + state.params.home_field_advantage) - away_elo
+            elo_diff = (home_elo + state.hfa(neutral)) - away_elo
             model_prob_home = elo_win_prob(elo_diff)
             rows.append(
                 {
@@ -151,7 +160,7 @@ def run_walkforward(
                 }
             )
 
-        state.update(home, away, season, home_margin)
+        state.update(home, away, season, home_margin, neutral)
 
     return pd.DataFrame(rows)
 

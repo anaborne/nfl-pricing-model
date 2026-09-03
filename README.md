@@ -37,7 +37,8 @@ used, chosen once from that public literature and never adjusted after seeing a 
 
 - `K = 20`
 - Home-field advantage: `+48` Elo points added to the home team before computing a
-  win probability
+  win probability, and `0` where nflverse marks the game `location == Neutral`, which
+  in the 2025 regular season is the seven internationals
 - Margin-of-victory dampener: `ln(|margin| + 1) × 2.2 / (0.001 × elo_gap + 2.2)`. A
   blowout moves ratings more than a squeaker, but the effect shrinks the more the two
   teams' ratings already differed (beating a team you were heavily favored against
@@ -48,8 +49,9 @@ used, chosen once from that public literature and never adjusted after seeing a 
   one continuous rating under their current abbreviation, so the rating follows the
   organization through a move
 
-`src/sensitivity.py` re-runs the whole walk-forward under a grid of alternatives to each
-of these. See [Did the constants flatter the model?](#did-the-constants-flatter-the-model)
+`src/sensitivity.py` re-runs the whole walk-forward under a grid of alternatives to `K`,
+home-field advantage and season carryover, plus two alternatives to the de-vig method.
+The margin-of-victory dampener and the franchise-alias rule are not swept. See [Did the constants flatter the model?](#did-the-constants-flatter-the-model)
 below.
 
 ### Walk-forward pricing
@@ -63,8 +65,9 @@ so even the weakest benchmark in the table is free of lookahead.
 ### Data
 
 [nflverse/nfldata](https://github.com/nflverse/nfldata), a public, community-maintained
-dataset (`data/games.csv`) carrying the recorded moneyline and spread alongside final
-scores for every NFL game back to 1999. One caveat is worth stating. nflverse documents
+dataset (`data/games.csv`) carrying final scores and the spread for every NFL game back
+to 1999, and the recorded moneyline from 2006 onward (complete from 2010; all 272 of the
+2025 games graded here have one). One caveat is worth stating. nflverse documents
 these fields only as "Odds for away/home team to win the game" and does not specify
 whether they are opening or closing quotes, so this repo calls them the market's recorded
 line and never the close. If they are pre-close quotes, the true gap against a real
@@ -88,7 +91,7 @@ Realized home win rate: 53.7%.
 
 | | Brier score | Log loss |
 |---|---|---|
-| Model (walk-forward Elo) | 0.2235 | 0.6372 |
+| Model (walk-forward Elo) | 0.2239 | 0.6380 |
 | Market (de-vigged moneyline) | 0.2116 | 0.6082 |
 | Naive (2002-2024 home-win rate) | 0.2492 | 0.6916 |
 
@@ -102,17 +105,22 @@ would itself be the finding worth doubting. What this artifact demonstrates is a
 pricing methodology, run walk-forward with no lookahead, graded against the market's own
 number, with the loss reported.
 
-The mechanism behind that gap is overconfidence, and not directional bias. Fitting
-`y ~ sigmoid(a + b·logit(p))` to each forecaster gives a recalibration slope of 0.889
+The model is mildly overconfident, and that accounts for very little of the gap. Fitting
+`y ~ sigmoid(a + b·logit(p))` to each forecaster gives a recalibration slope of 0.877
 for the model and 0.985 for the market (`output/recalibration.csv`). A slope of 1 is
 perfect calibration in the logit sense, and below 1 means the probabilities are too extreme
-for how often they are right. The market's 0.985 is essentially 1. The model's 0.889 says
-its 80% picks should have been more like 76% picks. The ratings carry real signal, stated
-with more certainty than the information behind them supports.
+for how often they are right. The market's 0.985 is essentially 1. The model's 0.877 says
+its 80% picks should have been more like 76% picks. Correcting that is the most generous
+fix available, since the coefficients are fit in sample on the same 272 games, and it moves
+the model's Brier from 0.2239 only to 0.2229, which closes 8% of the gap. Recalibrating
+both forecasters leaves 93% of the gap standing. What is left is resolution. The market's
+probabilities separate winners from losers better, AUC 0.720 against 0.687, and that is
+what the disagreement table below shows game by game.
 
 See `output/calibration_plot.png` for the full reliability diagram (model vs. market,
-both plotted against the realized frequency in each probability decile, with both
-recalibration slopes in the legend).
+both plotted against the realized frequency in each fixed-width 0.1 probability bin,
+with both recalibration slopes in the legend). The bins are equal width, not equal
+count, so the marker at the top of the range stands on very few games.
 
 ### Is the gap real, or is n=272 too small?
 
@@ -122,8 +130,8 @@ loss, model minus market (`output/paired_test.csv`):
 
 | Metric | Mean difference | SE | t | 95% CI |
 |---|---|---|---|---|
-| Brier | +0.01190 | 0.00518 | 2.30 | [+0.00175, +0.02205] |
-| Log loss | +0.02899 | 0.01168 | 2.48 | [+0.00611, +0.05187] |
+| Brier | +0.01231 | 0.00517 | 2.38 | [+0.00217, +0.02245] |
+| Log loss | +0.02976 | 0.01168 | 2.55 | [+0.00688, +0.05265] |
 
 Both intervals exclude zero. One season is still one season, and the lower bound is
 small, but the market's edge here is not a sampling artifact.
@@ -136,11 +144,11 @@ because that is where a bettor would actually act. Agreement is worth nothing. S
 
 | Disagreement > | n | Model Brier | Market Brier | Gap | Model hit rate | Market hit rate |
 |---|---|---|---|---|---|---|
-| 0.00 (all games) | 272 | 0.2235 | 0.2116 | +0.0119 | 64.0% | 65.8% |
-| 0.05 | 136 | 0.2353 | 0.2154 | +0.0199 | 60.3% | 62.5% |
-| 0.10 | 57 | 0.2588 | 0.2054 | +0.0533 | 50.9% | 64.9% |
-| 0.15 | 28 | 0.2868 | 0.2000 | +0.0869 | 46.4% | 67.9% |
-| 0.20 | 14 | 0.2930 | 0.1825 | +0.1104 | 42.9% | 71.4% |
+| 0.00 (all games) | 272 | 0.2239 | 0.2116 | +0.0123 | 64.3% | 65.8% |
+| 0.05 | 138 | 0.2275 | 0.2072 | +0.0203 | 63.0% | 65.2% |
+| 0.10 | 57 | 0.2614 | 0.2040 | +0.0574 | 50.9% | 64.9% |
+| 0.15 | 28 | 0.2869 | 0.2000 | +0.0869 | 46.4% | 67.9% |
+| 0.20 | 14 | 0.2929 | 0.1825 | +0.1104 | 42.9% | 71.4% |
 
 This is the sharpest version of the repo's own thesis. The gap widens monotonically as
 disagreement grows, more than eightfold from the full sample to the most-contested 14
@@ -155,9 +163,9 @@ Splitting the season (`output/by_week_bucket.csv`):
 
 | Weeks | n | Model Brier | Market Brier | Gap |
 |---|---|---|---|---|
-| 1-4 | 64 | 0.1998 | 0.1931 | +0.0066 |
-| 5-17 | 192 | 0.2311 | 0.2185 | +0.0126 |
-| 18 | 16 | 0.2274 | 0.2031 | +0.0243 |
+| 1-4 | 64 | 0.2021 | 0.1931 | +0.0089 |
+| 5-17 | 192 | 0.2309 | 0.2185 | +0.0124 |
+| 18 | 16 | 0.2278 | 0.2031 | +0.0247 |
 
 Week 18 is where the gap is widest, at roughly double the full-season figure on only 16
 games. Weeks 17 and 18 are when playoff seeds get clinched and teams rest starters, and a
@@ -172,17 +180,17 @@ at the published values:
 
 | Sweep | Values | Model Brier |
 |---|---|---|
-| `K` | 12 / 16 / 20 / 24 / 30 | 0.2259 / 0.2243 / 0.2235 / 0.2233 / 0.2237 |
-| Home-field advantage | 0 / 25 / 48 / 55 / 65 | 0.2234 / 0.2224 / 0.2235 / 0.2242 / 0.2255 |
-| Season regression | 0 / 0.25 / 1/3 / 0.5 | 0.2312 / 0.2246 / 0.2235 / 0.2224 |
+| `K` | 12 / 16 / 20 / 24 / 30 | 0.2262 / 0.2247 / 0.2239 / 0.2237 / 0.2241 |
+| Home-field advantage | 0 / 25 / 48 / 55 / 65 | 0.2234 / 0.2227 / 0.2239 / 0.2246 / 0.2259 |
+| Season regression | 0 / 0.25 / 1/3 / 0.5 | 0.2317 / 0.2251 / 0.2239 / 0.2227 |
 
 The published setting in each row is `K` = 20, home-field advantage = 48, and season
-regression = 1/3, which score 0.2235 in all three sweeps. Swapping the de-vig method
+regression = 1/3, which score 0.2239 in all three sweeps. Swapping the de-vig method
 changes the market's probabilities and leaves the model's untouched. Proportional
-(published) leaves a gap of 0.0119, power 0.0115, additive 0.0117.
+(published) leaves a gap of 0.0123, power 0.0120, additive 0.0121.
 
 Two things are worth reading off this table. First, the published configuration is not the
-best cell in it. K=24, HFA=25, and a 0.5 season regression each score marginally better,
+best cell in it. K=24, HFA=0 or 25, and a 0.5 season regression each score marginally better,
 which is what fixing constants from public literature, with no fit to this test set, looks
 like. Second, the best configuration anywhere in this sweep still loses to the market by
 about 0.011 Brier. No choice of constants on this grid turns the result around, so the
@@ -224,9 +232,9 @@ treatment. `src/evaluate.py` prints all three defensible treatments
 
 | Treatment | n | Model Brier | Market Brier |
 |---|---|---|---|
-| As published (tie = home non-win) | 272 | 0.2235 | 0.2116 |
-| Tie scored at 0.5 | 272 | 0.2231 | 0.2116 |
-| Tie excluded | 271 | 0.2239 | 0.2121 |
+| As published (tie = home non-win) | 272 | 0.2239 | 0.2116 |
+| Tie scored at 0.5 | 272 | 0.2235 | 0.2116 |
+| Tie excluded | 271 | 0.2243 | 0.2121 |
 
 The ordering does not change under any of the three.
 
